@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        canvas, div, label, input, button {
+            padding : 0 ;
+            margin : 0 ;
+        }
+        label {
+            margin-left : 3px ;
+        }
+        button {
+            margin-left : 10px  ;
+            padding : 2px ;
+        }
+    </style>
+    <script>
+        const WIDTH = 800, HEIGHT = 500 ;
+
+        function elt(element, attribute, textNode) {
+            const node = document.createElement(element) ;
+            
+            for(let key in attribute) {
+                if( attribute.hasOwnProperty(key) ) node.setAttribute(key, attribute[key]) ;
+            }
+
+            for(let i = 2 ; i < arguments.length ; i++) {
+                let children = arguments[i] ;
+                if(typeof(children) === 'string') {
+                    children = document.createTextNode(children) ;
+                    node.appendChild(children) ;
+                }
+            }
+
+            return node ;
+        }
+        function init() {
+
+            const canvas = document.createElement('canvas') ;
+            document.body.appendChild(canvas) ;
+            canvas.setAttribute('width', WIDTH + 'px') ;
+            canvas.setAttribute('height', HEIGHT + 'px') ;
+
+            const ctx = canvas.getContext('2d') ;
+            ctx.fillStyle = '#888' ;
+            ctx.strokeRect(0, 0, WIDTH, HEIGHT) ;
+            
+            ctx.closePath() ;
+
+            return [ ctx, canvas ] ;
+        }
+
+        window.onload = function() {
+
+            const title = elt('h1', null, 'Painter') ;
+            document.body.appendChild(title) ;
+            const div = elt('div', { 'class' : 'painter' }) ;
+            document.body.appendChild(div) ;
+            div.style.marginBottom = 5 + 'px' ;
+
+            function divToChild(...child) {
+                for(let i = 0 ; i < child.length ; i++) {
+                    div.appendChild(child[i]) ;
+                }
+            }           
+            
+            const PainterMenu = {} ;
+            const setTool = {} ;
+            const [ctx, canvas] = init() ;
+
+            const Data = {
+                ctx,
+                dataNumber : undefined,
+                dataArray : [],
+                status : 0,
+                back() {
+                    if(this.dataArray.length == 0) return ;
+                    if(this.dataNumber === undefined) this.dataNumber = this.dataArray.length ; 
+                    if(this.dataNumber - 1 >= 0) { 
+                        this.ctx.putImageData(this.dataArray[--this.dataNumber], 0, 0) ;
+                    }else {
+                        if(this.dataNumber == 0 && this.status != 0) {
+                            this.dataNumber-- ;
+                            const clear = document.getElementById('clear') ;
+                            const clickEvent = document.createEvent('HTMLEvents') ;
+                            clickEvent.initEvent('click', false, false) ;
+                            clear.dispatchEvent(clickEvent) ;
+                        }
+                        return ;
+                    }
+                },
+                front() {
+                    if(this.dataArray.length == 0) return ;
+                    if(this.dataNumber === undefined) this.dataNumber = this.dataArray.length ;
+                    if(this.dataNumber + 1 <= this.dataArray.length - 1) {
+                        this.ctx.putImageData(this.dataArray[++this.dataNumber], 0, 0) ;
+                    }else return ;
+                },
+                setData(img) {
+                    if(this.dataNumber === undefined) this.dataNumber = this.dataArray.length ;
+                    if(this.dataNumber + 1 < this.dataArray.length) {
+                        this.dataArray.length = this.dataNumber + 1 ;
+                    }
+                    if(this.dataArray.length < 5) {
+                        this.dataArray.push(img) ;
+                    }else {
+                        this.dataArray.shift() ;
+                        this.dataArray.push(img) ;
+                        this.status = 1 ;
+                    }
+                    if(this.dataNumber + 1 < this.dataArray.length) {
+                        this.dataNumber++ ;
+                    }
+                }
+            }
+
+            setTool.setStyle = (ctx, color, tinck, opacity) => {
+                ctx.strokeStyle = color ;
+                ctx.fillStyle = color ;
+                ctx.lineWidth = tinck ;
+                ctx.globalAlpha = opacity ;
+
+                return ctx ;
+            }
+            setTool.brush = (e, ctx) => {
+                const img = ctx.getImageData(0, 0, WIDTH, HEIGHT) ;
+                ctx.lineCap = 'round' ;
+                ctx.lineJoin = 'round' ;
+
+                ctx.beginPath() ;
+                ctx.moveTo(e.x, e.y) ;
+                
+                setDragListener(ctx, img, (q) => {
+                    ctx.lineTo(q.x, q.y) ;
+                    ctx.stroke() ;
+                }) ;
+            }
+            setTool.line = (e, ctx) => {
+                const img = ctx.getImageData(0, 0, WIDTH, HEIGHT) ;
+
+                setDragListener(ctx, img, (q) => {
+                    ctx.beginPath() ;
+                    ctx.moveTo(e.x, e.y) ; ctx.lineTo(q.x, q.y) ;
+                    ctx.stroke() ;
+                }) ;
+            }
+            setTool.circle = (e, ctx) => {
+                const img = ctx.getImageData(0, 0, WIDTH, HEIGHT) ;
+                
+                setDragListener(ctx, img, (q) => {
+                    const cx = q.x - e.x ;
+                    const cy = q.y - e.y ;
+                    const r = Math.sqrt(cx * cx + cy * cy) ;
+                    ctx.beginPath() ;
+                    ctx.arc(e.x, e.y, r, 0, 2 * Math.PI, false) ;
+                    ctx.stroke() ;
+                });
+            }
+            setTool.fillCircle = (e, ctx) => {
+                const img = ctx.getImageData(0, 0, WIDTH, HEIGHT) ;
+                
+                setDragListener(ctx, img, (q) => {
+                    const cx = q.x - e.x ;
+                    const cy = q.y - e.y ;
+                    const r = Math.sqrt(cx * cx + cy * cy) ;
+                    ctx.beginPath() ;
+                    ctx.arc(e.x, e.y, r, 0, 2 * Math.PI, false) ;
+                    ctx.fill() ;
+                });
+            }
+            setTool.square = (e, ctx) => {
+                const img = ctx.getImageData(0, 0, WIDTH, HEIGHT) ;
+                
+                setDragListener(ctx, img, (q) => {
+                    const cx = q.x - e.x ;
+                    const cy = q.y - e.y ;
+                    ctx.beginPath() ;
+                    ctx.strokeRect(e.x, e.y, cx, cy) ;
+                }) ;
+            }
+            setTool.fillSquare = (e, ctx) => {
+                const img = ctx.getImageData(0, 0, WIDTH, HEIGHT) ;
+                
+                setDragListener(ctx, img, (q) => {
+                    const cx = q.x - e.x ;
+                    const cy = q.y - e.y ;
+                    ctx.beginPath() ;
+                    ctx.fillRect(e.x, e.y, cx, cy) ;
+                }) ;
+            }
+
+            PainterMenu.button = (ctx, Data) => {
+                const back = elt('button', null, '뒤로가기') ;
+                const front = elt('button', null, '앞으로 가기') ;
+                
+                divToChild(back, front) ;
+
+                back.addEventListener('click', (e) => {
+                    Data.back() ;
+                }, false) ; 
+                front.addEventListener('click', (e) => {
+                    Data.front() ;
+                }, false) ; 
+            }
+
+            PainterMenu.color = () => {
+                const input = elt('input', { 'type' : 'color', 'name' : 'color', 'id' : 'color' }) ;
+                const label = elt('label', { 'for' : 'color' }, '색상 선택 : ') ;
+
+                divToChild(label, input) ;
+            } ;
+
+            PainterMenu.type = () => {
+                const select = elt('select', { 'name' : 'selectType', 'id' : 'selectType' }) ;
+                const label = elt('label', { 'for' : 'selectType' }, '도구 선택 : ') ;
+                const optionType = ['brush', 'line', 'circle', 'fillCircle', 'square', 'fillSquare'] ;
+                for(let i in optionType) {
+                    const option = elt('option', null, optionType[i]) ;
+                    select.appendChild(option) ;
+                }
+                
+                divToChild(label, select) ;
+            }
+            PainterMenu.setTinck = () => {
+                const select = elt('select', { 'name' : 'selectTinck', 'id' : 'selectTinck' }) ;
+                const label = elt('label', { 'for' : 'selectTinck' }, '선 굵기 : ') ;
+
+                for(let i = 2 ; i < 40 ; i += 2) {
+                    const option = elt('option', null, String(i)) ;
+                    select.appendChild(option) ;
+                }
+                
+                divToChild(label, select) ;
+            }
+            PainterMenu.setOpacity = () => {
+                const select = elt('select', { 'name' : 'selectOpacity', 'id' : 'selectOpacity' }) ;
+                const label = elt('label', { 'for' : 'selectOpacity' }, '투명도 : ') ;   
+
+                for(let i = 10 ; i >= 1 ; i --) {
+                    const option = elt('option', null, String(i)) ;
+                    select.appendChild(option) ;
+                }
+                
+                divToChild(label, select) ;
+            }   
+
+            PainterMenu.clear = (ctx, Data) => {
+
+                const button = elt('button', { 'id' : 'clear' }, '전부 지우기') ;
+                divToChild(button) ;
+
+                Data.status = 0 ;
+
+                button.addEventListener('click', (e) => {
+                    ctx.clearRect(0, 0, WIDTH, HEIGHT) ;
+                    ctx.strokeStyle = '#888' ;
+                    ctx.lineWidth = 1 ;
+                    ctx.strokeRect(0, 0, WIDTH, HEIGHT) ;
+                }, false) ;
+            }
+
+
+            // canvas 에서 마우스 다운시 그림판 ctx 공통속성 초기화 (색, 굵기, 투명도) 또한 기능 선택
+            canvas.addEventListener('mousedown', (e) => {
+                const color = document.getElementById('color').value ;
+                const tinck = document.getElementById('selectTinck').value ;
+                const type = document.getElementById('selectType').value ;
+                const opacity = document.getElementById('selectOpacity').value / 10 ;
+
+                const newCtx = setTool.setStyle(ctx, color, tinck, opacity) ;
+                setTool[type](realativePosition(e, newCtx.canvas), newCtx) ;
+
+            }, false) ;
+
+            // painter 메뉴 세팅
+            function setPainter(PainterMenu, ctx) {
+                for(let key in PainterMenu) {
+                    PainterMenu[key](ctx, Data) ;
+                }
+            }
+
+            // 마우스 canvas 클릭시 처음 마우스 좌표 포인트 구하는 함수
+            function realativePosition(e, canvas) {
+                const can = canvas.getBoundingClientRect() ;
+                return {
+                    x : Math.floor(e.clientX - can.left),
+                    y : Math.floor(e.clientY - can.top) 
+                } ;
+            }
+
+            // 마우스를 canvas에 클릭하고 setTool로 기능 초기화시에 기능에 맞춰서 setDragListener를 실행후 
+            // document 이벤트를 새로 만들어서 세팅함 
+            function setDragListener(ctx, img, draw) {
+
+                const mouseMoveEventListener = (e) => {
+
+                    ctx.putImageData(img, 0, 0) ;
+                    draw(realativePosition(e, ctx.canvas)) ;
+                } ;
+
+                document.addEventListener('mousemove', mouseMoveEventListener, false) ;
+
+                document.addEventListener('mouseup', function (e) {
+                    
+                    ctx.putImageData(img, 0, 0) ;
+                    draw(realativePosition(e, ctx.canvas)) ;
+
+                    img = ctx.getImageData(0, 0, WIDTH, HEIGHT) ;
+
+                    Data.setData(img) ;
+                    
+                    document.removeEventListener('mousemove', mouseMoveEventListener, false) ;
+                    document.removeEventListener('mouseup', arguments.callee, false) ;             
+                }, false) ;
+            }
+
+            setPainter(PainterMenu, ctx) ;
+        }
+    </script>
+</head>
+<body>
+    
+</body>
+</html>
